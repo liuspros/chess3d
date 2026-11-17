@@ -64,8 +64,12 @@ export default wrap(async (req, res) => {
     const username = String(body.username || '').trim()
     if (platform !== 'lichess' && platform !== 'chesscom') throw httpError(400, 'Pick Lichess or Chess.com.')
     if (!NAME_RE.test(username)) throw httpError(400, 'That does not look like a username.')
-    const code = `MIGRATE-${crypto.randomInt(1000, 10000)}`
-    await iref.set({ platform, username: username.toLowerCase(), code, at: Date.now() })
+    // same account within the window keeps the same code, so one already pasted on the profile stays valid
+    const prev = await iref.get()
+    const pd = prev.exists ? prev.data() : null
+    const reuse = pd && pd.platform === platform && pd.username === username.toLowerCase() && Date.now() - pd.at < CODE_TTL
+    const code = reuse ? pd.code : `MIGRATE-${crypto.randomInt(1000, 10000)}`
+    if (!reuse) await iref.set({ platform, username: username.toLowerCase(), code, at: Date.now() })
     return send(res, 200, { code, platform, username, where: platform === 'lichess' ? 'bio' : 'location' })
   }
 
