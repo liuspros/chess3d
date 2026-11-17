@@ -47,10 +47,18 @@ export async function verifyBearer(req) {
   const h = req.headers.authorization || ''
   const tok = h.startsWith('Bearer ') ? h.slice(7) : null
   if (!tok) throw httpError(401, 'Sign in first.')
+  let auth
   try {
-    if (deps.verifyToken) return await deps.verifyToken(tok)
-    return await (await admin()).auth.verifyIdToken(tok)
-  } catch {
+    auth = deps.verifyToken ? null : (await admin()).auth
+  } catch (e) {
+    // server setup problem (missing / malformed FIREBASE_SERVICE_ACCOUNT), not the person's fault
+    console.error('Firebase admin setup failed:', e.message)
+    throw httpError(500, 'Server is not set up yet: check FIREBASE_SERVICE_ACCOUNT on Vercel.')
+  }
+  try {
+    return deps.verifyToken ? await deps.verifyToken(tok) : await auth.verifyIdToken(tok)
+  } catch (e) {
+    console.error('verifyIdToken failed:', e.code || e.message)
     throw httpError(401, 'Your session expired. Sign in again.')
   }
 }
