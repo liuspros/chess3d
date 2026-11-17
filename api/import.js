@@ -79,7 +79,10 @@ export default wrap(async (req, res) => {
     const { platform, username, code, at } = s.data()
     if (Date.now() - at > CODE_TTL) throw httpError(410, 'That code expired. Start again.')
     const prof = await fetchProfile(platform, username)
-    if (!prof.text.includes(code)) throw httpError(422, `Could not find ${code} on your ${platform === 'lichess' ? 'Lichess bio' : 'Chess.com location'}. Save it, wait a moment, and try again.`)
+    if (!prof.text.includes(code)) {
+      const seen = prof.text.replace(/\s+/g, ' ').trim().slice(0, 60)
+      throw httpError(422, `Could not find ${code} on your ${platform === 'lichess' ? 'Lichess bio' : 'Chess.com location or name'}. We read: ${seen ? `"${seen}"` : 'nothing there'}. Save it, wait a minute (Chess.com updates slowly), and try again.`)
+    }
     const claimRef = db.collection('importClaims').doc(`${platform}_${prof.canonical}`)
     const claim = await claimRef.get()
     if (claim.exists && claim.data().uid !== user.uid) throw httpError(409, 'That account is already linked to another player.')

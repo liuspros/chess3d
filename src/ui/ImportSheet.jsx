@@ -84,7 +84,7 @@ function RatingTab({ auth, onRated }) {
           <p className="hint">
             {platform === 'lichess'
               ? 'On Lichess open Preferences > Profile and paste the code anywhere in your bio. Save.'
-              : 'On Chess.com open Settings > Profile and paste the code into Location. Save.'}{' '}
+              : 'On Chess.com open Settings > Profile and paste the code into the Location field (scroll down). If you do not see Location, add the code after your name instead, for example "Julius MIGRATE-1234". Save.'}{' '}
             Then press Verify. You can remove it afterwards.
           </p>
           <div className="row gap">
