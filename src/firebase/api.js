@@ -107,14 +107,19 @@ export async function setActiveGame(uid, code) {
   }
 }
 
-export async function getTopPlayers(n = 50) {
+const boardCache = new Map()
+export async function getTopPlayers(n = 50, field = 'rating') {
+  const hit = boardCache.get(field)
+  if (hit && Date.now() - hit.at < 5 * 60 * 1000) return hit.rows // saves reads on the free plan
   const { db, fs } = await load()
-  const q = fs.query(fs.collection(db, 'users'), fs.orderBy('rating', 'desc'), fs.limit(n * 2))
+  const q = fs.query(fs.collection(db, 'users'), fs.orderBy(field, 'desc'), fs.limit(n + 20))
   const s = await fs.getDocs(q)
-  return s.docs
+  const rows = s.docs
     .map((d) => ({ uid: d.id, ...d.data() }))
     .filter((p) => !p.guest && (p.games || 0) > 0)
     .slice(0, n)
+  boardCache.set(field, { at: Date.now(), rows })
+  return rows
 }
 
 export async function getHistory(uid, n = 30) {
@@ -293,7 +298,7 @@ export const flagGame = (code, loserColor) =>
 export const claimAbandon = (code, myColor) =>
   finish(code, myColor, 'abandoned', (g) => {
     const seen = myColor === 'w' ? g.seenB : g.seenW
-    return serverNow() - (seen || g.lastMoveAt || 0) > 45000
+    return serverNow() - (seen || g.lastMoveAt || 0) > 100000
   })
 
 export async function offerDraw(code, color) {
@@ -339,7 +344,7 @@ export async function settleGame(code, uid) {
     const w = g.result?.winner
     const score = w == null ? 0.5 : w === color ? 1 : 0
     const rated = (g.moves || []).length >= 4
-    const delta = rated ? eloDelta(u.rating, opp?.rating ?? 1200, score, u.games || 0) : 0
+    const delta = rated ? eloDelta(u.rating, opp?.rating ?? 1200, score, u.games || 0, u.provisional || 0) : 0
     const rating = u.rating + delta
     tx.update(gref, { [`eloApplied.${uid}`]: true })
     tx.update(uref, {
@@ -349,6 +354,7 @@ export async function settleGame(code, uid) {
       losses: (u.losses || 0) + (score === 0 ? 1 : 0),
       draws: (u.draws || 0) + (score === 0.5 ? 1 : 0),
       activeGame: null,
+      ...(rated && u.provisional > 0 ? { provisional: u.provisional - 1, rd: Math.max(60, Math.round((u.rd || 200) * 0.93)) } : {}),
     })
     tx.set(fs.doc(db, 'users', uid, 'history', code), {
       mode: 'online',
@@ -433,4 +439,205 @@ export async function tryPair(profile, tc) {
     }
   }
   return null
+}
+
+/* ------------------------------ shop ------------------------------ */
+export async function getIdToken() {
+  const m = await load()
+  const u = m.auth.currentUser
+  if (!u) throw new Error('Sign in first.')
+  return u.getIdToken()
+}
+
+// ids of items this player owns (written only by the server after Paystack confirms payment)
+export async function getInventory(uid) {
+  const { db, fs } = await load()
+  const s = await fs.getDocs(fs.collection(db, 'users', uid, 'inventory'))
+  return s.docs.map((d) => d.id)
+}
+
+/* ------------------------------ chat + reactions ------------------------------ */
+// Free-plan friendly: one small doc per message, last 40 only, deleted when the game is left.
+export const CHAT_MAX = 200
+
+export async function sendChat(code, profile, text) {
+  const t = String(text || '').trim().slice(0, CHAT_MAX)
+  if (!t) return
+  const { db, fs } = await load()
+  await fs.addDoc(fs.collection(db, 'games', code, 'chat'), { uid: profile.uid, name: profile.name || 'Player', text: t, at: fs.serverTimestamp() })
+}
+
+export async function subscribeChat(code, cb) {
+  const { db, fs } = await load()
+  const q = fs.query(fs.collection(db, 'games', code, 'chat'), fs.orderBy('at', 'desc'), fs.limit(40))
+  return fs.onSnapshot(
+    q,
+    (snap) => cb(snap.docs.map((d) => ({ id: d.id, ...d.data({ serverTimestamps: 'estimate' }), at: ms(d.data({ serverTimestamps: 'estimate' }).at) })).reverse()),
+    () => {},
+  )
+}
+
+export async function clearChat(code) {
+  try {
+    const { db, fs } = await load()
+    const snap = await fs.getDocs(fs.query(fs.collection(db, 'games', code, 'chat'), fs.limit(100)))
+    await Promise.all(snap.docs.map((d) => fs.deleteDoc(d.ref || fs.doc(db, 'games', code, 'chat', d.id))))
+  } catch {
+    /* best effort */
+  }
+}
+
+export async function sendReaction(code, color, id) {
+  const { db, fs } = await load()
+  await fs.updateDoc(fs.doc(db, 'games', code), { react: { c: color, id, n: Date.now() } })
+}
+
+/* ------------------------------ friends + challenges ------------------------------ */
+// Friend codes find people without a user search; requests/challenges are single tiny docs.
+const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+const genFriendCode = () => Array.from({ length: 6 }, () => CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)]).join('')
+
+export async function ensureFriendCode(profile) {
+  if (profile.friendCode) return profile.friendCode
+  const { db, fs } = await load()
+  for (let i = 0; i < 6; i++) {
+    const code = genFriendCode()
+    const q = await fs.getDocs(fs.query(fs.collection(db, 'users'), fs.where('friendCode', '==', code), fs.limit(1)))
+    if (q.docs.length) continue
+    await fs.updateDoc(fs.doc(db, 'users', profile.uid), { friendCode: code })
+    return code
+  }
+  throw new Error('Could not create a friend code, try again')
+}
+
+export async function findByCode(raw) {
+  const { db, fs } = await load()
+  const code = String(raw || '').trim().toUpperCase()
+  if (code.length < 6) return null
+  const q = await fs.getDocs(fs.query(fs.collection(db, 'users'), fs.where('friendCode', '==', code), fs.limit(1)))
+  const d = q.docs[0]
+  return d ? { uid: d.id, ...d.data() } : null
+}
+
+export async function sendFriendRequest(me, target) {
+  if (target.uid === me.uid) throw new Error('That is your own code.')
+  const { db, fs } = await load()
+  const mine = await fs.getDoc(fs.doc(db, 'users', me.uid, 'friends', target.uid))
+  if (mine.exists()) throw new Error('You are already friends.')
+  await fs.setDoc(fs.doc(db, 'requests', `${target.uid}_${me.uid}`), { to: target.uid, from: { uid: me.uid, name: me.name, rating: me.rating || 1200 }, at: fs.serverTimestamp() })
+}
+
+export async function getRequests(uid) {
+  const { db, fs } = await load()
+  const q = await fs.getDocs(fs.query(fs.collection(db, 'requests'), fs.where('to', '==', uid), fs.limit(30)))
+  return q.docs.map((d) => ({ id: d.id, ...d.data() }))
+}
+
+export async function answerRequest(me, req, accept) {
+  const { db, fs } = await load()
+  if (accept) {
+    await fs.setDoc(fs.doc(db, 'users', me.uid, 'friends', req.from.uid), { name: req.from.name, at: fs.serverTimestamp() })
+    await fs.setDoc(fs.doc(db, 'users', req.from.uid, 'friends', me.uid), { name: me.name, at: fs.serverTimestamp() })
+  }
+  await fs.deleteDoc(fs.doc(db, 'requests', req.id))
+}
+
+export async function getFriends(uid) {
+  const { db, fs } = await load()
+  const q = await fs.getDocs(fs.query(fs.collection(db, 'users', uid, 'friends'), fs.limit(100)))
+  return Promise.all(
+    q.docs.map(async (d) => {
+      const p = await fs.getDoc(fs.doc(db, 'users', d.id))
+      return { uid: d.id, name: d.data().name, ...(p.exists() ? { rating: p.data().rating, name: p.data().name } : {}) }
+    }),
+  )
+}
+
+export async function removeFriend(me, uid) {
+  const { db, fs } = await load()
+  await fs.deleteDoc(fs.doc(db, 'users', me, 'friends', uid))
+}
+
+export async function sendChallenge(me, toUid, code, tc) {
+  const { db, fs } = await load()
+  await fs.setDoc(fs.doc(db, 'challenges', toUid), { from: { uid: me.uid, name: me.name, rating: me.rating || 1200 }, code, tc: { id: tc.id, label: tc.label }, at: fs.serverTimestamp() })
+}
+
+export async function subscribeChallenge(uid, cb) {
+  const { db, fs } = await load()
+  return fs.onSnapshot(
+    fs.doc(db, 'challenges', uid),
+    (s) => {
+      if (!s.exists()) return cb(null)
+      const d = s.data({ serverTimestamps: 'estimate' })
+      cb({ ...d, at: ms(d.at) })
+    },
+    () => {},
+  )
+}
+
+export async function clearChallenge(uid) {
+  try {
+    const { db, fs } = await load()
+    await fs.deleteDoc(fs.doc(db, 'challenges', uid))
+  } catch {
+    /* ignore */
+  }
+}
+
+/* ------------------------------ push notifications ------------------------------ */
+// Firebase Cloud Messaging is free. The token is stored under the user; /api/notify sends the pushes.
+export const pushSupported = () => typeof window !== 'undefined' && 'Notification' in window && 'serviceWorker' in navigator && 'PushManager' in window
+
+export async function registerPush(uid, vapidKey) {
+  if (!pushSupported() || !vapidKey) throw new Error('Notifications are not available on this device.')
+  if (Notification.permission === 'denied') throw new Error('Notifications are blocked in your browser settings.')
+  if (Notification.permission !== 'granted' && (await Notification.requestPermission()) !== 'granted') throw new Error('Permission was not given.')
+  const { a, db, fs } = await load()
+  const { getMessaging, getToken, isSupported } = await import('firebase/messaging')
+  if (!(await isSupported())) throw new Error('This browser does not support push.')
+  const reg = await navigator.serviceWorker.ready
+  const token = await getToken(getMessaging(a), { vapidKey, serviceWorkerRegistration: reg })
+  if (!token) throw new Error('Could not get a notification token.')
+  await fs.setDoc(fs.doc(db, 'users', uid, 'tokens', token), { at: fs.serverTimestamp(), ua: navigator.userAgent.slice(0, 80) })
+  try {
+    localStorage.setItem('chess3d.pushToken', token)
+  } catch {
+    /* ignore */
+  }
+  return token
+}
+
+export async function unregisterPush(uid) {
+  let token = null
+  try {
+    token = localStorage.getItem('chess3d.pushToken')
+    localStorage.removeItem('chess3d.pushToken')
+  } catch {
+    /* ignore */
+  }
+  if (!token) return
+  const { db, fs } = await load()
+  await fs.deleteDoc(fs.doc(db, 'users', uid, 'tokens', token)).catch(() => {})
+}
+
+// fire-and-forget: tell the server to push the other player (it validates everything itself)
+export async function notify(payload) {
+  try {
+    const BASE = import.meta.env?.VITE_API_BASE || ''
+    const tok = await getIdToken()
+    await fetch(BASE + '/api/notify', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + tok }, body: JSON.stringify(payload), keepalive: true })
+  } catch {
+    /* best effort */
+  }
+}
+
+// Rating import (server checks the one-time code on the person's Lichess / Chess.com profile)
+export async function importRequest(payload) {
+  const BASE = import.meta.env?.VITE_API_BASE || ''
+  const tok = await getIdToken()
+  const r = await fetch(BASE + '/api/import', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + tok }, body: JSON.stringify(payload) })
+  const j = await r.json().catch(() => ({}))
+  if (!r.ok) throw new Error(j.error || 'Import failed. Try again.')
+  return j
 }

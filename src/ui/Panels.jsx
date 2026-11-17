@@ -1,4 +1,5 @@
 import { CLASSES, uciToSan } from '../game/review.js'
+import { Icon } from './Icons.jsx'
 
 export function EvalGraph({ pct, ply, onSeek }) {
   const n = pct.length - 1
@@ -56,10 +57,10 @@ export function ReviewPanel({ analysis, progress, ply, total, onSeek, onClose, o
           </>
         )}
         <div className="row gap" style={{ marginTop: 10 }}>
-          <button className="btn small" disabled={ply <= 0} onClick={() => onSeek(0)}>⏮</button>
-          <button className="btn small" style={{ flex: 1 }} disabled={ply <= 0} onClick={() => onSeek(ply - 1)}>◀ Prev</button>
-          <button className="btn small" style={{ flex: 1 }} disabled={ply >= total} onClick={() => onSeek(ply + 1)}>Next ▶</button>
-          <button className="btn small" disabled={ply >= total} onClick={() => onSeek(total)}>⏭</button>
+          <button className="btn small" disabled={ply <= 0} onClick={() => onSeek(0)} aria-label="First move"><Icon name="first" size={16} /></button>
+          <button className="btn small" style={{ flex: 1 }} disabled={ply <= 0} onClick={() => onSeek(ply - 1)}><Icon name="prev" size={14} /> Prev</button>
+          <button className="btn small" style={{ flex: 1 }} disabled={ply >= total} onClick={() => onSeek(ply + 1)}>Next <Icon name="next" size={14} /></button>
+          <button className="btn small" disabled={ply >= total} onClick={() => onSeek(total)} aria-label="Last move"><Icon name="last" size={16} /></button>
           <button className="btn small" onClick={onExit}>Done</button>
         </div>
       </div>
@@ -85,7 +86,7 @@ export function PuzzlePanel({ puzzle, index, status, onHint, onSolution, onNext,
             <button className="btn gold big" onClick={onNext}>Next puzzle</button>
           ) : (
             <>
-              <button className="btn small" style={{ flex: 1 }} onClick={onHint}>{hintUsed ? 'Hint ✓' : 'Hint'}</button>
+              <button className="btn small" style={{ flex: 1 }} onClick={onHint}>{hintUsed ? 'Hint shown' : 'Hint'}</button>
               <button className="btn small" style={{ flex: 1 }} onClick={onSolution}>Show move</button>
               <button className="btn small" style={{ flex: 1 }} onClick={onRetry}>Restart</button>
             </>

@@ -3,7 +3,7 @@ const USERS = 'fakeauth.users'
 const me = () => { try { return JSON.parse(sessionStorage.getItem('fakeauth.me') || 'null') } catch { return null } }
 const setMe = (u) => { u ? sessionStorage.setItem('fakeauth.me', JSON.stringify(u)) : sessionStorage.removeItem('fakeauth.me'); subs.forEach((f) => f(me())) }
 const subs = new Set()
-export const getAuth = () => ({ get currentUser() { return me() } })
+export const getAuth = () => ({ get currentUser() { const u = me(); return u && { ...u, getIdToken: async () => 'tok-' + u.uid } } })
 export const onAuthStateChanged = (_a, cb) => { subs.add(cb); setTimeout(() => cb(me()), 0); return () => subs.delete(cb) }
 export class GoogleAuthProvider {}
 const rnd = () => 'u' + Math.random().toString(36).slice(2, 10)

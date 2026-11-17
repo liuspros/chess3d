@@ -221,8 +221,8 @@ const Piece = memo(function Piece({ piece, shownType, held, geos, mats, selected
   )
 })
 
-function Pieces({ pieces, mats, selected, onSquare, fallenKing, shadows, registry, holdRef }) {
-  const geos = useMemo(() => createPieceGeometries(), [])
+function Pieces({ tier, pieces, mats, selected, onSquare, fallenKing, shadows, registry, holdRef }) {
+  const geos = useMemo(() => createPieceGeometries(mats.pieceStyle, tier.seg), [mats.pieceStyle, tier.seg])
   useEffect(() => () => disposeGeometries(geos), [geos])
   return (
     <group>
@@ -573,6 +573,25 @@ function CameraRig({ side, controlsRef, interactive, checkPulse, mate, homeSigna
 /* ------------------------------------------------------------------ */
 /* Lights                                                              */
 /* ------------------------------------------------------------------ */
+// Light devices render at a capped frame rate: less heat, battery and jank.
+function FrameLimiter({ fps }) {
+  const advance = useThree((s) => s.advance)
+  useEffect(() => {
+    let raf
+    let last = 0
+    const step = (t) => {
+      raf = requestAnimationFrame(step)
+      if (t - last >= 1000 / fps - 3) {
+        last = t
+        advance(t / 1000)
+      }
+    }
+    raf = requestAnimationFrame(step)
+    return () => cancelAnimationFrame(raf)
+  }, [advance, fps])
+  return null
+}
+
 function Lights({ tier }) {
   return (
     <>
@@ -705,11 +724,13 @@ export default function Scene({
 
   return (
     <Canvas
+      frameloop={tier.fps ? 'never' : 'always'}
       shadows={tier.shadows > 0 ? 'soft' : false}
       dpr={tier.dpr}
       camera={{ position: [0, 10, 10], fov: BASE_FOV, near: 0.1, far: 120 }}
       gl={{ antialias: tier.antialias, powerPreference: 'high-performance' }}
     >
+      {tier.fps && <FrameLimiter fps={tier.fps} />}
       <color attach="background" args={['#0f0b08']} />
       <fog attach="fog" args={['#0f0b08', 34, 85]} />
 
@@ -729,6 +750,7 @@ export default function Scene({
       <Trays mats={materials} shadows={tier.shadows > 0} />
       <Board mats={materials} onSquare={onSquare} shadows={tier.shadows > 0} />
       <Pieces
+        tier={tier}
         pieces={pieces}
         mats={materials}
         selected={selected}
@@ -746,6 +768,7 @@ export default function Scene({
         glowTex={materials.glowTex}
       />
       <Hands
+        quality={tier.name}
         active={showHands}
         enabled={handsActive}
         events={events}

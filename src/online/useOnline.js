@@ -6,7 +6,7 @@ const LS_ACTIVE = 'chess3d.activeGame'
 const uciOf = (m) => m.from + m.to + (m.promotion || '')
 
 // Glues one Firestore game document to the local game engine.
-export function useOnline({ game, profile, refreshProfile }) {
+export function useOnline({ game, profile, refreshProfile, chatOn = true }) {
   const [code, setCode] = useState(null)
   const [g, setG] = useState(null)
   const [error, setError] = useState(null)
@@ -15,6 +15,8 @@ export function useOnline({ game, profile, refreshProfile }) {
   const [resumeCode, setResumeCode] = useState(null)
   const [now, setNow] = useState(0)
   const [rematchCode, setRematchCode] = useState(null)
+  const [messages, setMessages] = useState([])
+  const lastSend = useRef(0)
 
   const gameRef = useRef(game)
   gameRef.current = game
@@ -63,6 +65,10 @@ export function useOnline({ game, profile, refreshProfile }) {
   }, [])
 
   const leave = useCallback(() => {
+    // chat disappears with the game: whoever leaves a finished game clears it
+    const gg = gRef.current
+    if (gg && gg.status === 'finished' && gg.code && gg.players?.includes(profRef.current?.uid)) api.clearChat(gg.code)
+    setMessages([])
     unsub.current?.()
     unsub.current = null
     started.current = null
@@ -138,15 +144,58 @@ export function useOnline({ game, profile, refreshProfile }) {
       const cur = gRef.current
       if (!cur || cur.status !== 'active') return
       const count = history.length - 1
-      api.submitMove(cur.code, uid, uciOf(m), count, over).catch(() => {
+      // push the opponent only when they look away (no heartbeat for 40 s) and the game is still going
+      const oppColor = cur.white?.uid === uid ? 'b' : 'w'
+      const seen = oppColor === 'w' ? cur.seenW : cur.seenB
+      const away = api.serverNow() - (seen || cur.lastMoveAt || 0) > 40000
+      api
+        .submitMove(cur.code, uid, uciOf(m), count, over)
+        .then(() => {
+          if (away && !over) api.notify({ type: 'move', code: cur.code })
+        })
+        .catch(() => {
         // out of sync: rebuild from the document
         const d = gRef.current
         if (d) started.current = null
         setG((x) => (x ? { ...x } : x))
-      })
+        })
     })
     return () => gm.setMoveHandler(null)
   }, [code, uid])
+
+  /* ---------------- chat + reactions ---------------- */
+  const chatLive = !!(chatOn && code && g && (g.status === 'active' || g.status === 'finished'))
+  useEffect(() => {
+    if (!chatLive) return
+    let off = null
+    let dead = false
+    api.subscribeChat(code, setMessages).then((u) => (dead ? u() : (off = u)))
+    return () => {
+      dead = true
+      off?.()
+    }
+  }, [chatLive, code])
+
+  const sendChat = useCallback(
+    async (text) => {
+      const t = Date.now()
+      if (t - lastSend.current < 1500 || !code || !profRef.current) return false // gentle rate limit keeps Firestore usage tiny
+      lastSend.current = t
+      await api.sendChat(code, profRef.current, text)
+      return true
+    },
+    [code],
+  )
+  const lastReact = useRef(0)
+  const sendReaction = useCallback(
+    async (id) => {
+      const t = Date.now()
+      if (t - lastReact.current < 1200 || !code || !color) return
+      lastReact.current = t
+      await api.sendReaction(code, color, id)
+    },
+    [code, color],
+  )
 
   /* ---------------- clocks, flags, presence ---------------- */
   useEffect(() => {
@@ -171,14 +220,16 @@ export function useOnline({ game, profile, refreshProfile }) {
 
   useEffect(() => {
     if (!g || !color || (g.status !== 'active' && g.status !== 'waiting')) return
-    const beat = () => api.heartbeat(g.code, color)
+    if (g.tc?.daily) return // correspondence games need no presence
+    // one write every 45s, only while the tab is visible: keeps us far inside the free Firestore quota
+    const beat = () => document.visibilityState === 'visible' && api.heartbeat(g.code, color)
     beat()
-    const id = setInterval(beat, 15000)
+    const id = setInterval(beat, 45000)
     return () => clearInterval(id)
   }, [g?.code, g?.status, color]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const oppSeen = g && color ? (color === 'w' ? g.seenB : g.seenW) : null
-  const oppAway = !!(g && g.status === 'active' && g.moves.length >= 0 && now && now - (oppSeen || g.lastMoveAt || now) > 45000)
+  const oppAway = !!(g && g.status === 'active' && g.moves.length >= 0 && now && now - (oppSeen || g.lastMoveAt || now) > 100000 && !g.tc?.daily)
 
   /* ---------------- actions ---------------- */
   const create = useCallback(
@@ -316,6 +367,10 @@ export function useOnline({ game, profile, refreshProfile }) {
     resumeCode,
     rematchCode,
     oppAway,
+    messages,
+    sendChat,
+    sendReaction,
+    reaction: g?.react || null,
     drawOffered: !!(g && g.drawOffer && g.drawOffer !== color && g.status === 'active'),
     drawSent: !!(g && g.drawOffer && g.drawOffer === color && g.status === 'active'),
     waiting: !!(g && g.status === 'waiting'),

@@ -6,7 +6,9 @@ export function kFactor(games) {
 }
 
 // score: 1 win, 0.5 draw, 0 loss
-export function eloDelta(rating, oppRating, score, games) {
+// provisional: imported ratings are uncertain, so they move faster for the first ~15 games
+export function eloDelta(rating, oppRating, score, games, provisional = 0) {
   const expected = 1 / (1 + Math.pow(10, (oppRating - rating) / 400))
-  return Math.round(kFactor(games) * (score - expected))
+  const k = provisional > 0 ? Math.max(kFactor(games), 50) : kFactor(games)
+  return Math.round(k * (score - expected))
 }

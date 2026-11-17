@@ -30,6 +30,12 @@ export const getDocs = async (q) => {
 }
 export const onSnapshot = (ref, cb) => {
   let last = null
+  if (ref.kind === 'col') {
+    const runC = async () => { const r = await getDocs(ref); const s = JSON.stringify(r.docs.map((d) => [d.id, d.data()])); if (s === last) return; last = s; cb(r) }
+    const offC = onChange(runC)
+    setTimeout(runC, 0)
+    return offC
+  }
   const run = () => { const s = JSON.stringify(rawGet(ref.path) ?? null); if (s === last) return; last = s; cb(mkSnap(ref.path)) }
   const off = onChange(run)
   setTimeout(run, 0)

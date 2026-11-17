@@ -2,11 +2,11 @@
 // Single-thread build = no special COOP/COEP headers needed, works on any host.
 
 export const LEVELS = [
-  { id: 'beginner', name: 'Beginner', elo: '~800', skill: 0, depth: 2, time: 120, blunder: 0.3 },
-  { id: 'casual', name: 'Casual', elo: '~1200', skill: 4, depth: 5, time: 250, blunder: 0.1 },
-  { id: 'club', name: 'Club', elo: '~1600', skill: 9, depth: 9, time: 500, blunder: 0.02 },
-  { id: 'advanced', name: 'Advanced', elo: '~2000', skill: 15, depth: 13, time: 900, blunder: 0 },
-  { id: 'master', name: 'Master', elo: '2400+', skill: 20, depth: 20, time: 1600, blunder: 0 },
+  { id: 'beginner', rating: 800, name: 'Beginner', elo: '~800', skill: 0, depth: 2, time: 120, blunder: 0.3 },
+  { id: 'casual', rating: 1200, name: 'Casual', elo: '~1200', skill: 4, depth: 5, time: 250, blunder: 0.1 },
+  { id: 'club', rating: 1600, name: 'Club', elo: '~1600', skill: 9, depth: 9, time: 500, blunder: 0.02 },
+  { id: 'advanced', rating: 2000, name: 'Advanced', elo: '~2000', skill: 15, depth: 13, time: 900, blunder: 0 },
+  { id: 'master', rating: 2400, name: 'Master', elo: '2400+', skill: 20, depth: 20, time: 1600, blunder: 0 },
 ]
 
 export class Engine {

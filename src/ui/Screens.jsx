@@ -3,6 +3,7 @@ import { LEVELS } from '../game/engine.js'
 import { TIME_CONTROLS } from '../game/useChessGame.js'
 import * as api from '../firebase/api.js'
 import { CLASSES } from '../game/review.js'
+import { Icon, PieceIcon, GoogleLogo } from './Icons.jsx'
 
 const wx = (i) => ({ '--wx': `${(i * 83) % 240}px`, '--wy': `${(i * 47) % 160}px` })
 
@@ -26,7 +27,7 @@ function Head({ title, onBack }) {
     <div className="sheet-head">
       {onBack && (
         <button className="btn small" onClick={onBack} aria-label="Back">
-          ←
+          <Icon name="back" size={16} />
         </button>
       )}
       <h2>{title}</h2>
@@ -37,13 +38,13 @@ function Head({ title, onBack }) {
 const initials = (n) => (n || '?').trim().slice(0, 1).toUpperCase()
 
 /* ------------------------------------------------------------------ */
-export function Home({ auth, onNav, resumeOnline, onResumeOnline, canResume, onResume, daily }) {
+export function Home({ auth, onNav, resumeOnline, onResumeOnline, canResume, onResume, daily, offline }) {
   const p = auth.profile
   return (
     <div className="panel home">
       <div className="home-top">
         <button className="chip" onClick={() => onNav(p ? 'profile' : 'auth')}>
-          <i>{p ? initials(p.name) : '♙'}</i>
+          <i>{p ? initials(p.name) : <Icon name="user" size={14} />}</i>
           {p ? (
             <>
               {p.name} <em>{p.rating}</em>
@@ -54,15 +55,16 @@ export function Home({ auth, onNav, resumeOnline, onResumeOnline, canResume, onR
         </button>
       </div>
       <div className="brand">
-        <div className="crest">♞</div>
+        <div className="crest"><PieceIcon type="n" size={54} /></div>
         <h1>CHESS 3D</h1>
         <p>Marble, walnut and ebony. A real board, in a real room.</p>
       </div>
 
+      {offline && <div className="note" style={{ marginTop: 0, marginBottom: 12 }}>You are offline. Computer games, puzzles and game review all still work.</div>}
       <div className="tiles">
         {resumeOnline && (
           <button className="tile wide accent" onClick={onResumeOnline}>
-            <span className="ic">▶</span>
+            <span className="ic"><Icon name="play" size={26} /></span>
             <span>
               <b>Resume online game</b>
               <br />
@@ -72,42 +74,61 @@ export function Home({ auth, onNav, resumeOnline, onResumeOnline, canResume, onR
         )}
         {canResume && !resumeOnline && (
           <button className="tile wide accent" onClick={onResume}>
-            <span className="ic">▶</span>
+            <span className="ic"><Icon name="play" size={26} /></span>
             <span>
               <b>Back to your game</b>
             </span>
           </button>
         )}
-        <button className="tile accent" style={wx(1)} onClick={() => onNav('online')}>
-          <span className="ic">♜</span>
+        <button className="tile accent" style={wx(1)} disabled={offline} onClick={() => onNav('online')}>
+          <span className="ic"><Icon name="people" size={26} /></span>
           <b>Play a friend</b>
           <small>Room code or link</small>
         </button>
-        <button className="tile accent" style={wx(2)} onClick={() => onNav('quick')}>
-          <span className="ic">⚡</span>
+        <button className="tile accent" style={wx(2)} disabled={offline} onClick={() => onNav('quick')}>
+          <span className="ic"><Icon name="bolt" size={26} /></span>
           <b>Quick match</b>
           <small>Find an opponent</small>
         </button>
         <button className="tile" style={wx(3)} onClick={() => onNav('bot')}>
-          <span className="ic">♞</span>
+          <span className="ic"><Icon name="cpu" size={26} /></span>
           <b>vs Computer</b>
           <small>Stockfish, 5 levels</small>
         </button>
         <button className="tile" style={wx(4)} onClick={() => onNav('local')}>
-          <span className="ic">♟</span>
+          <span className="ic"><PieceIcon type="p" size={26} /></span>
           <b>Pass & play</b>
           <small>Two players, one device</small>
         </button>
         <button className="tile" style={wx(5)} onClick={() => onNav('puzzles')}>
-          <span className="ic">♛</span>
+          <span className="ic"><Icon name="puzzle" size={26} /></span>
           <b>Puzzles</b>
           <small>{daily ? 'Daily puzzle ready' : 'Mate and tactics'}</small>
           {daily && <span className="tag">DAILY</span>}
         </button>
-        <button className="tile" style={wx(6)} onClick={() => onNav('leaderboard')}>
-          <span className="ic">♚</span>
+        <button className="tile" style={wx(8)} disabled={offline} onClick={() => onNav('friends')}>
+          <span className="ic"><Icon name="people" size={26} /></span>
+          <b>Friends</b>
+          <small>Add and challenge</small>
+        </button>
+        <button className="tile" style={wx(9)} onClick={() => onNav('import')}>
+          <span className="ic"><Icon name="download" size={26} /></span>
+          <b>Import</b>
+          <small>From Chess.com or Lichess</small>
+        </button>
+        <button className="tile" style={wx(6)} disabled={offline} onClick={() => onNav('leaderboard')}>
+          <span className="ic"><Icon name="trophy" size={26} /></span>
           <b>Leaderboard</b>
           <small>Top rated players</small>
+        </button>
+        <button className="tile wide accent" style={wx(7)} disabled={offline} onClick={() => onNav('shop')}>
+          <span className="ic"><Icon name="sparkle" size={26} /></span>
+          <span>
+            <b>Shop</b>
+            <br />
+            <small>Premium boards and piece sets</small>
+          </span>
+          <span className="tag">NEW</span>
         </button>
       </div>
       <div className="home-foot">
@@ -119,7 +140,7 @@ export function Home({ auth, onNav, resumeOnline, onResumeOnline, canResume, onR
 }
 
 /* ------------------------------------------------------------------ */
-export function Setup({ mode, prefs, setPrefs, onStart, onBack, engineError }) {
+export function Setup({ botRating, mode, prefs, setPrefs, onStart, onBack, engineError }) {
   const set = (k) => (v) => setPrefs({ ...prefs, [k]: v })
   return (
     <div className="panel sheet">
@@ -128,7 +149,7 @@ export function Setup({ mode, prefs, setPrefs, onStart, onBack, engineError }) {
         <>
           <label>Play as</label>
           <Seg value={prefs.color} onChange={set('color')} options={[{ value: 'w', label: 'White' }, { value: 'r', label: 'Random' }, { value: 'b', label: 'Black' }]} />
-          <label>Difficulty</label>
+          <label>Difficulty{botRating ? ` · your offline rating ${botRating.rating}` : ''}</label>
           <Seg value={prefs.level} onChange={set('level')} options={LEVELS.map((l) => ({ value: l.id, label: l.name, sub: l.elo }))} />
         </>
       )}
@@ -166,8 +187,9 @@ export function AuthSheet({ auth, onBack, onDone, reason }) {
     <div className="panel sheet">
       <Head title="Sign in" onBack={onBack} />
       <p className="hint">{reason || 'An account keeps your rating, game history and lets friends find you in a room.'}</p>
-      <button className="btn big" style={{ width: '100%' }} disabled={auth.busy} onClick={auth.google}>
-        Continue with Google
+      <button className="btn big google" style={{ width: '100%' }} disabled={auth.busy} onClick={auth.google}>
+        <GoogleLogo size={20} />
+        <span>Continue with Google</span>
       </button>
       <div className="sep">OR EMAIL</div>
       <Seg value={tab} onChange={setTab} options={[{ value: 'in', label: 'Sign in' }, { value: 'up', label: 'Create account' }]} />
@@ -230,7 +252,7 @@ export function OnlineSheet({ auth, online, prefs, setPrefs, onBack, quick, shar
               }
             }}
           >
-            {copied ? 'Copied ✓' : 'Share link'}
+            {copied ? 'Copied' : 'Share link'}
           </button>
         </div>
         <button className="link" onClick={online.cancelRoom}>Cancel room</button>
@@ -323,6 +345,102 @@ export function Leaderboard({ auth, onBack }) {
 }
 
 /* ------------------------------------------------------------------ */
+export function Friends({ auth, onBack, onChallenge, timeControls }) {
+  const me = auth.profile
+  const [code, setCode] = useState(me?.friendCode || '')
+  const [friends, setFriends] = useState(null)
+  const [reqs, setReqs] = useState([])
+  const [add, setAdd] = useState('')
+  const [msg, setMsg] = useState('')
+  const [tc, setTc] = useState('5+0')
+  const [copied, setCopied] = useState(false)
+  const reload = async () => {
+    try {
+      const [f, r] = await Promise.all([api.getFriends(me.uid), api.getRequests(me.uid)])
+      setFriends(f)
+      setReqs(r)
+    } catch (e) {
+      setMsg(e.message)
+      setFriends([])
+    }
+  }
+  useEffect(() => {
+    if (!me) return
+    api.ensureFriendCode(me).then(setCode).catch(() => {})
+    reload()
+  }, [me?.uid]) // eslint-disable-line react-hooks/exhaustive-deps
+  const sendReq = async () => {
+    setMsg('')
+    try {
+      const t = await api.findByCode(add)
+      if (!t) return setMsg('No player has that code.')
+      await api.sendFriendRequest(me, t)
+      api.notify({ type: 'friend', to: t.uid })
+      setMsg(`Request sent to ${t.name}.`)
+      setAdd('')
+    } catch (e) {
+      setMsg(e.message)
+    }
+  }
+  const answer = async (r, ok) => {
+    await api.answerRequest(me, r, ok).catch((e) => setMsg(e.message))
+    reload()
+  }
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(code)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    } catch {
+      /* ignore */
+    }
+  }
+  return (
+    <div className="panel sheet">
+      <Head title="Friends" onBack={onBack} />
+      <label>Your friend code</label>
+      <div className="li">
+        <span className="nm" style={{ letterSpacing: '0.2em', fontWeight: 800 }}>{code || '…'}</span>
+        <button className="btn small" onClick={copy} disabled={!code}>{copied ? 'Copied' : 'Copy'}</button>
+      </div>
+      <label>Add a friend</label>
+      <div className="row">
+        <input value={add} maxLength={6} onChange={(e) => setAdd(e.target.value.toUpperCase())} placeholder="Friend code" style={{ flex: 1 }} />
+        <button className="btn" disabled={add.length < 6} onClick={sendReq}>Send request</button>
+      </div>
+      {msg && <div className="note">{msg}</div>}
+      {reqs.length > 0 && (
+        <>
+          <label>Requests</label>
+          <div className="list">
+            {reqs.map((r) => (
+              <div key={r.id} className="li">
+                <span className="nm">{r.from.name}<br /><span className="sub">{r.from.rating}</span></span>
+                <button className="btn small gold" onClick={() => answer(r, true)}>Accept</button>
+                <button className="btn small" onClick={() => answer(r, false)}>Decline</button>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+      <label>Challenge with</label>
+      <Seg value={tc} onChange={setTc} options={timeControls.filter((t) => t.id !== 'inf').map((t) => ({ value: t.id, label: t.label }))} />
+      <label>Your friends</label>
+      {!friends && <div className="empty">Loading…</div>}
+      {friends && friends.length === 0 && <div className="empty">No friends yet. Share your code.</div>}
+      <div className="list">
+        {friends?.map((f) => (
+          <div key={f.uid} className="li">
+            <span className="nm">{f.name}<br /><span className="sub">{f.rating ?? ''}</span></span>
+            <button className="btn small gold" onClick={() => onChallenge(f, timeControls.find((t) => t.id === tc))}>Challenge</button>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+/* ------------------------------------------------------------------ */
 export function Profile({ auth, onBack, onReview, localHistory }) {
   const p = auth.profile
   const [rows, setRows] = useState(null)
@@ -389,7 +507,26 @@ export function Profile({ auth, onBack, onReview, localHistory }) {
 }
 
 /* ------------------------------------------------------------------ */
-export function Settings({ prefs, setPrefs, autoTierName, onBack }) {
+export function Settings({ uid, prefs, setPrefs, autoTierName, onBack }) {
+  const [pushMsg, setPushMsg] = useState('')
+  const vapid = import.meta.env.VITE_VAPID_KEY
+  const pushOn = prefs.push !== false && api.pushSupported() && typeof Notification !== 'undefined' && Notification.permission === 'granted'
+  const setPush = async (v) => {
+    setPushMsg('')
+    if (v === 'on') {
+      try {
+        if (!uid) throw new Error('Sign in first.')
+        await api.registerPush(uid, vapid)
+        setPrefs({ ...prefs, push: true })
+        setPushMsg('Notifications are on.')
+      } catch (e) {
+        setPushMsg(e.message)
+      }
+    } else {
+      await api.unregisterPush(uid).catch(() => {})
+      setPrefs({ ...prefs, push: false })
+    }
+  }
   return (
     <div className="panel sheet">
       <Head title="Settings" onBack={onBack} />
@@ -397,20 +534,32 @@ export function Settings({ prefs, setPrefs, autoTierName, onBack }) {
       <Seg
         value={prefs.graphics}
         onChange={(v) => setPrefs({ ...prefs, graphics: v })}
-        options={[{ value: 'auto', label: 'Auto', sub: autoTierName }, { value: 'high', label: 'High' }, { value: 'medium', label: 'Medium' }, { value: 'low', label: 'Low' }, { value: '2d', label: '2D' }]}
+        options={[{ value: 'auto', label: 'Auto', sub: autoTierName }, { value: 'high', label: 'High' }, { value: 'medium', label: 'Medium' }, { value: 'low', label: 'Lite', sub: 'Fastest' }]}
       />
       <label>Hands move the pieces</label>
       <Seg value={prefs.hands ? 'on' : 'off'} onChange={(v) => setPrefs({ ...prefs, hands: v === 'on' })} options={[{ value: 'on', label: 'On' }, { value: 'off', label: 'Off' }]} />
+      <label>Chat and reactions (online games)</label>
+      <Seg value={prefs.chat === false ? 'off' : 'on'} onChange={(v) => setPrefs({ ...prefs, chat: v === 'on' })} options={[{ value: 'on', label: 'On' }, { value: 'off', label: 'Off' }]} />
+      <label>Notifications (your move, challenges, friend requests)</label>
+      {!api.pushSupported() || !vapid ? (
+        <div className="note" style={{ marginTop: 0 }}>{!api.pushSupported() ? 'Not supported on this browser. On iPhone, add the app to the Home Screen first.' : 'Notifications are not set up yet.'}</div>
+      ) : (
+        <Seg value={pushOn ? 'on' : 'off'} onChange={setPush} options={[{ value: 'on', label: 'On' }, { value: 'off', label: 'Off' }]} />
+      )}
+      {pushMsg && <div className="note">{pushMsg}</div>}
       <label>Sound</label>
       <Seg value={prefs.sound ? 'on' : 'off'} onChange={(v) => setPrefs({ ...prefs, sound: v === 'on' })} options={[{ value: 'on', label: 'On' }, { value: 'off', label: 'Off' }]} />
-      <p className="hint">Low graphics and 2D are for older phones. Auto lowers quality by itself if the game stutters.</p>
+      <p className="hint">Lite is still 3D, tuned for older phones: it skips shadows and fine detail, and runs at 30 fps to save battery. Auto lowers quality by itself if the game stutters.</p>
     </div>
   )
 }
 
 /* ------------------------------------------------------------------ */
 export function PuzzleSheet({ puzzles, progress, daily, onPlay, onBack }) {
-  const next = useMemo(() => puzzles.find((p) => !progress.solved.includes(p.id)) || puzzles[0], [puzzles, progress])
+  const next = useMemo(() => {
+    const open = puzzles.filter((p) => !progress.solved.includes(p.id))
+    return open.sort((a, b) => Math.abs(a.rating - progress.rating) - Math.abs(b.rating - progress.rating))[0] || puzzles[0]
+  }, [puzzles, progress])
   return (
     <div className="panel sheet">
       <Head title="Puzzles" onBack={onBack} />

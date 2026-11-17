@@ -4,7 +4,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 // All pieces are built in code: lathe-turned bodies + a few primitives.
 // 1 unit = 1 board square. Pieces stand on y = 0.
 
-const SEG = 48
+let SEG = 48
 
 function lathe(points, seg = SEG) {
   const v = points.map(([r, y]) => new THREE.Vector2(r, y))
@@ -195,7 +195,41 @@ function knight() {
 // approximate heights (board units) used for hand grips and shadows
 export const PIECE_H = { p: 0.86, n: 1.05, b: 1.18, r: 0.93, q: 1.3, k: 1.48 }
 
-export function createPieceGeometries() {
+/* ---- "modern" set: bold, simple turned shapes ---- */
+const MB = [
+  [0, 0],
+  [0.34, 0],
+  [0.34, 0.07],
+  [0.22, 0.13],
+]
+function mPawn() {
+  return merge([lathe([...MB, [0.13, 0.42], [0.1, 0.5], [0, 0.5]]), sphere(0.17, 0.62)])
+}
+function mRook() {
+  const body = lathe([...MB, [0.23, 0.2], [0.23, 0.74], [0.3, 0.76], [0.3, 0.9], [0, 0.9]])
+  const parts = [body]
+  for (let i = 0; i < 4; i++) {
+    const a = (i / 4) * Math.PI * 2 + Math.PI / 4
+    parts.push(box(0.16, 0.12, 0.16, Math.cos(a) * 0.2, 0.96, Math.sin(a) * 0.2, -a))
+  }
+  return merge(parts)
+}
+function mBishop() {
+  return merge([lathe([...MB, [0.16, 0.7], [0.22, 0.82], [0.14, 1.0], [0, 1.08]]), sphere(0.06, 1.12)])
+}
+function mQueen() {
+  const t = new THREE.TorusGeometry(0.2, 0.04, 10, 32)
+  t.rotateX(Math.PI / 2)
+  t.translate(0, 1.2, 0)
+  return merge([lathe([...MB, [0.16, 0.95], [0.27, 1.17], [0, 1.17]]), t, sphere(0.07, 1.27)])
+}
+function mKing() {
+  return merge([lathe([...MB, [0.17, 0.98], [0.27, 1.2], [0, 1.2]]), box(0.08, 0.3, 0.08, 0, 1.36, 0), box(0.22, 0.08, 0.08, 0, 1.4, 0)])
+}
+
+export function createPieceGeometries(style = 'staunton', seg = 48) {
+  SEG = seg
+  if (style === 'modern') return { p: mPawn(), n: knight(), b: mBishop(), r: mRook(), q: mQueen(), k: mKing() }
   return { p: pawn(), n: knight(), b: bishop(), r: rook(), q: queen(), k: king() }
 }
 

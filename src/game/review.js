@@ -6,8 +6,8 @@ export const winPct = (cp) => 50 + 50 * (2 / (1 + Math.exp(-0.00368208 * Math.ma
 const accuracyOf = (loss) => Math.max(0, Math.min(100, 103.1668 * Math.exp(-0.04354 * loss) - 3.1669))
 
 export const CLASSES = {
-  best: { label: 'Best', color: '#7ccf6a', icon: '★' },
-  good: { label: 'Good', color: '#a7c957', icon: '✓' },
+  best: { label: 'Best', color: '#7ccf6a', icon: '!!' },
+  good: { label: 'Good', color: '#a7c957', icon: '' },
   inaccuracy: { label: 'Inaccuracy', color: '#e9c46a', icon: '?!' },
   mistake: { label: 'Mistake', color: '#f4a259', icon: '?' },
   blunder: { label: 'Blunder', color: '#e5554b', icon: '??' },

@@ -483,6 +483,13 @@ export function useChessGame() {
 
   const getChess = useCallback(() => chessRef.current, [])
 
+  // best move for the side to move (works offline: Stockfish runs on the device)
+  const getHint = useCallback(async () => {
+    if (!engineRef.current) engineRef.current = new Engine()
+    await engineRef.current.init()
+    return engineRef.current.bestMove(chessRef.current.fen(), { skill: 20, depth: 14, time: 700 })
+  }, [])
+
   return {
     pieces,
     moves,
@@ -519,5 +526,6 @@ export function useChessGame() {
     startReview,
     setReviewPly,
     getChess,
+    getHint,
   }
 }

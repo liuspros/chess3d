@@ -1,6 +1,5 @@
 import { useEffect, useRef } from 'react'
-
-const GLYPH = { p: '♟', n: '♞', b: '♝', r: '♜', q: '♛', k: '♚' }
+import { Icon, PieceIcon } from './Icons.jsx'
 const VALUE = { p: 1, n: 3, b: 3, r: 5, q: 9, k: 0 }
 
 export function fmtClock(ms) {
@@ -15,7 +14,7 @@ export function PlayerBar({ name, sub, color, clock, active, capturedTypes, adva
   const low = clock != null && clock < 30000
   return (
     <div className={`pbar ${active ? 'active' : ''}`}>
-      <div className={`avatar ${color}`}>{color === 'w' ? '♔' : '♚'}</div>
+      <div className={`avatar ${color}`}><PieceIcon type="k" size={26} /></div>
       <div className="pinfo">
         <div className="pname">
           {name}
@@ -27,7 +26,7 @@ export function PlayerBar({ name, sub, color, clock, active, capturedTypes, adva
             {[...capturedTypes]
               .sort((a, b) => VALUE[b] - VALUE[a])
               .map((t, i) => (
-                <span key={i} className={color === 'w' ? 'tb' : 'tw'}>{GLYPH[t]}</span>
+                <span key={i} className={color === 'w' ? 'tb' : 'tw'}><PieceIcon type={t} size={15} /></span>
               ))}
           </span>
           {advantage > 0 && <span className="adv">+{advantage}</span>}
@@ -50,7 +49,7 @@ export function MoveList({ moves, open, onClose, current, onPick }) {
     <aside className={`moves ${open ? 'open' : ''}`}>
       <div className="moves-head">
         <span>Moves</span>
-        <button className="x" onClick={onClose} aria-label="Close moves">✕</button>
+        <button className="x" onClick={onClose} aria-label="Close moves"><Icon name="close" size={16} /></button>
       </div>
       <div className="moves-body" ref={ref}>
         {rows.length === 0 && <div className="empty">No moves yet</div>}
@@ -75,7 +74,7 @@ export function PromotionDialog({ color, onPick, onCancel }) {
         <div className="promo-row">
           {opts.map((t) => (
             <button key={t} className={`promo-btn ${color}`} onClick={() => onPick(t)}>
-              {GLYPH[t]}
+              <PieceIcon type={t} size={40} />
             </button>
           ))}
         </div>
