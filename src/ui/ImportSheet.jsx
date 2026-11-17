@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import * as api from '../firebase/api.js'
 import { Icon } from './Icons.jsx'
 import { Seg } from './Screens.jsx'
+import { clearPendingLichess, pendingLichess, startLichessLogin } from '../lib/lichessOAuth.js'
 import { importChesscom, importLichess, parsePgnText } from '../lib/importers.js'
 
 const SITE = { lichess: 'Lichess', chesscom: 'Chess.com' }
@@ -18,6 +19,21 @@ function RatingTab({ auth, onRated }) {
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState('')
   const [done, setDone] = useState(null)
+
+  // returning from Lichess: finish the import with the code Lichess gave us
+  const uid = p?.uid
+  const ok = !!p && !p.guest && !p.imported
+  useEffect(() => {
+    const pend = pendingLichess()
+    if (!pend || !ok) return
+    clearPendingLichess()
+    setPlatform('lichess')
+    setBusy(true)
+    api.importRequest({ action: 'lichess_oauth', ...pend })
+      .then((r) => { setDone(r); onRated(r) })
+      .catch((e) => setMsg(e.message))
+      .finally(() => setBusy(false))
+  }, [uid, ok]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!p || p.guest) return <p className="hint">Sign in with Google or email to bring your rating over. Guests can still import games below.</p>
   if (p.imported && !done)
@@ -73,6 +89,12 @@ function RatingTab({ auth, onRated }) {
     <div className="stack">
       <p className="hint">Prove the account is yours, and we start your rating where you left off.</p>
       <Seg value={platform} options={PLATFORMS} onChange={(v) => { setPlatform(v); setStep(null) }} />
+      {platform === 'lichess' && !step && (
+        <>
+          <button className="btn gold big" disabled={busy} onClick={() => startLichessLogin()}>{busy ? 'Checking…' : 'Continue with Lichess'}</button>
+          <p className="hint" style={{ textAlign: 'center' }}>One tap. Lichess only tells us your username, nothing else. Or use a code:</p>
+        </>
+      )}
       {!step ? (
         <>
           <input className="field" placeholder={`${SITE[platform]} username`} value={username} maxLength={30} autoCapitalize="none" autoCorrect="off" onChange={(e) => setUsername(e.target.value.trim())} />

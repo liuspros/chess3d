@@ -47,6 +47,47 @@ export async function fetchProfile(platform, username) {
   }
 }
 
+
+// shared by both proofs of ownership (profile code, Lichess OAuth)
+async function finalize(db, uref, uid, platform, prof) {
+  const claimRef = db.collection('importClaims').doc(`${platform}_${prof.canonical}`)
+  const claim = await claimRef.get()
+  if (claim.exists && claim.data().uid !== uid) throw httpError(409, 'That account is already linked to another player.')
+  const picked = pickRating(platform, prof.list)
+  if (!picked) throw httpError(422, 'No rated games found on that account.')
+  const puzzleRating = convertPuzzle(platform, prof.puzzle)
+  const rd = Math.round(initialRd(platform, picked.games))
+  const ts = await serverTs()
+  await claimRef.set({ uid, at: ts })
+  await uref.update({
+    rating: picked.rating,
+    provisional: PROVISIONAL_GAMES,
+    rd,
+    imported: { platform, username: prof.canonical, raw: picked.raw, kind: picked.kind, games: picked.games, puzzle: puzzleRating, at: ts },
+  })
+  return { rating: picked.rating, raw: picked.raw, kind: picked.kind, games: picked.games, puzzleRating, rd, provisional: PROVISIONAL_GAMES }
+}
+
+// Lichess OAuth: swap the code for a token (PKCE, no secret), read the account name, drop the token again.
+async function lichessLogin({ code, verifier, redirect }) {
+  if (!code || !verifier || !redirect) throw httpError(400, 'Lichess login was incomplete.')
+  const tr = await deps.fetch('https://lichess.org/api/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': ua() },
+    body: new URLSearchParams({ grant_type: 'authorization_code', code, code_verifier: verifier, redirect_uri: redirect, client_id: 'chess3d' }).toString(),
+  })
+  const tj = await tr.json().catch(() => ({}))
+  if (!tr.ok || !tj.access_token) throw httpError(401, 'Lichess did not accept that login. Try again.')
+  const auth = { Authorization: `Bearer ${tj.access_token}`, 'User-Agent': ua(), Accept: 'application/json' }
+  try {
+    const ar = await deps.fetch('https://lichess.org/api/account', { headers: auth })
+    if (!ar.ok) throw httpError(502, 'Could not read your Lichess account.')
+    return (await ar.json()).username
+  } finally {
+    deps.fetch('https://lichess.org/api/token', { method: 'DELETE', headers: auth }).catch(() => {})
+  }
+}
+
 export default wrap(async (req, res) => {
   if (req.method !== 'POST') throw httpError(405, 'POST only')
   const user = await verifyBearer(req)
@@ -83,22 +124,12 @@ export default wrap(async (req, res) => {
       const seen = prof.text.replace(/\s+/g, ' ').trim().slice(0, 60)
       throw httpError(422, `Could not find ${code} on your ${platform === 'lichess' ? 'Lichess bio' : 'Chess.com location or name'}. We read: ${seen ? `"${seen}"` : 'nothing there'}. Save it, wait a minute (Chess.com updates slowly), and try again.`)
     }
-    const claimRef = db.collection('importClaims').doc(`${platform}_${prof.canonical}`)
-    const claim = await claimRef.get()
-    if (claim.exists && claim.data().uid !== user.uid) throw httpError(409, 'That account is already linked to another player.')
-    const picked = pickRating(platform, prof.list)
-    if (!picked) throw httpError(422, 'No rated games found on that account.')
-    const puzzleRating = convertPuzzle(platform, prof.puzzle)
-    const rd = Math.round(initialRd(platform, picked.games))
-    const ts = await serverTs()
-    await claimRef.set({ uid: user.uid, at: ts })
-    await uref.update({
-      rating: picked.rating,
-      provisional: PROVISIONAL_GAMES,
-      rd,
-      imported: { platform, username: prof.canonical, raw: picked.raw, kind: picked.kind, games: picked.games, puzzle: puzzleRating, at: ts },
-    })
-    return send(res, 200, { rating: picked.rating, raw: picked.raw, kind: picked.kind, games: picked.games, puzzleRating, rd, provisional: PROVISIONAL_GAMES })
+    return send(res, 200, await finalize(db, uref, user.uid, platform, prof))
+  }
+  if (body.action === 'lichess_oauth') {
+    const name = await lichessLogin(body)
+    const prof = await fetchProfile('lichess', name)
+    return send(res, 200, await finalize(db, uref, user.uid, 'lichess', prof))
   }
   throw httpError(400, 'Unknown action')
 })

@@ -13,6 +13,7 @@ import { applyWoodTheme } from './ui/wood.js'
 import { LEVELS } from './game/engine.js'
 import { TIME_CONTROLS, useChessGame } from './game/useChessGame.js'
 import { analyzeGame, uciToSan } from './game/review.js'
+import { takeLichessCallback } from './lib/lichessOAuth.js'
 import { ImportSheet } from './ui/ImportSheet.jsx'
 import { loadImported, mergeImported, saveImported } from './lib/importers.js'
 import { useAuth } from './online/useAuth.js'
@@ -355,6 +356,12 @@ export default function App() {
       setSheet('auth')
     }
   }, [auth.profile, auth.ready]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // back from "Continue with Lichess"
+  useEffect(() => {
+    const r = takeLichessCallback()
+    if (r) setSheet('import')
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (online.error && gameVisible) say(online.error)

@@ -193,3 +193,28 @@ assert.equal(r.body.rating, 1200 + Math.round(((1000 - 1200) * (20 / 30)) / 5) *
 await call(importer, { ...H('tok-g'), body: {} })
 deps.fetch = realFetch
 console.log('import tests passed')
+
+// ---- lichess oauth
+{
+  const tokenCalls = []
+  deps.fetch = async (url, init = {}) => {
+    const json = (d, status = 200) => ({ ok: status < 400, status, json: async () => d })
+    if (url === 'https://lichess.org/api/token') {
+      tokenCalls.push(init.method)
+      if (init.method === 'DELETE') return json({})
+      const b = new URLSearchParams(init.body)
+      return b.get('code') === 'goodcode' && b.get('code_verifier') === 'ver' ? json({ access_token: 'lip_tok' }) : json({ error: 'bad' }, 400)
+    }
+    if (url === 'https://lichess.org/api/account') return init.headers.Authorization === 'Bearer lip_tok' ? json({ username: 'Cara' }) : json({}, 401)
+    if (url === 'https://lichess.org/api/user/Cara') return json({ username: 'Cara', profile: {}, perfs: { rapid: { rating: 1600, games: 80 }, puzzle: { rating: 1800 } } })
+    return realFetch(url, init)
+  }
+  store.set('users/userCCCCCC', { name: 'Cara', rating: 1200, games: 0 })
+  deps.verifyToken = async () => ({ uid: 'userCCCCCC' })
+  r = await call(importer, { ...H('x'), body: { action: 'lichess_oauth', code: 'wrong', verifier: 'ver', redirect: 'https://app/' } }); assert.equal(r.code, 401)
+  r = await call(importer, { ...H('x'), body: { action: 'lichess_oauth', code: 'goodcode', verifier: 'ver', redirect: 'https://app/' } })
+  assert.equal(r.code, 200); assert.equal(r.body.raw, 1600); assert.equal(store.get('users/userCCCCCC').imported.username, 'cara')
+  assert.ok(tokenCalls.includes('DELETE')) // token revoked right away
+  deps.fetch = realFetch
+  console.log('lichess oauth tests passed')
+}
